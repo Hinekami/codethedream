@@ -1,113 +1,94 @@
-const axios = require('axios'); //npm install axios
-const express = require("express"); //npm install express
-var cors = require('cors'); //npm install cors
-var querystring = require('querystring');
-var cookieParser = require('cookie-parser'); //npm install cookie-parser
-
-
 const client_id = '3ebe7b6c776142a2a957548260b4dedf';
-const client_secret = '7df55d9500b3480aa9f19c036ef1d035';
-var redirect_uri = 'http://localhost:8888/callback';
+const redirect_uri = 'http://localhost:8888/callback';
+
+const params = new URLSearchParams(window.location.search);
+const code = params.get("code");
+
+if (!code) {
+    redirectToAuthCodeFlow(clientId);
+} else {
+  const profile = await fetchProfile(token);
+  console.log(profile); // Profile data logs to console
+  populateUI(profile);
+}
 
 
-/**
- * Generates a random string containing numbers and letters
- * @param  {number} length The length of the string
- * @return {string} The generated string
- */
-var generateRandomString = function(length) {
-  var text = '';
-  var possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+export async function redirectToAuthCodeFlow(clientId) {
+  const verifier = generateCodeVerifier(128);
+  const challenge = await generateCodeChallenge(verifier);
 
-  for (var i = 0; i < length; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  localStorage.setItem("verifier", verifier);
+
+  const params = new URLSearchParams();
+  params.append("client_id", clientId);
+  params.append("response_type", "code");
+  params.append("redirect_uri", "http://localhost:5173/callback");
+  params.append("scope", "user-read-private user-read-email");
+  params.append("code_challenge_method", "S256");
+  params.append("code_challenge", challenge);
+
+  document.location = `https://accounts.spotify.com/authorize?${params.toString()}`;
+}
+
+function generateCodeVerifier(length) {
+  let text = '';
+  let possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+  for (let i = 0; i < length; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return text;
-};
+}
 
-var stateKey = 'spotify_auth_state';
+async function generateCodeChallenge(codeVerifier) {
+  const data = new TextEncoder().encode(codeVerifier);
+  const digest = await window.crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode.apply(null, [...new Uint8Array(digest)]))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+}
 
-var app = express();
+export async function getAccessToken(clientId, code) {
+  const verifier = localStorage.getItem("verifier");
 
-app.use(express.static(__dirname + '/public'))
-   .use(cors())
-   .use(cookieParser());
+  const params = new URLSearchParams();
+  params.append("client_id", clientId);
+  params.append("grant_type", "authorization_code");
+  params.append("code", code);
+  params.append("redirect_uri", "http://localhost:8888/callback");
+  params.append("code_verifier", verifier);
 
-app.get('/login', function(req, res) {
-
-    var state = generateRandomString(16);
-    res.cookie(stateKey, state);
-  
-    // your application requests authorization
-    var scope = 'user-read-private user-read-email';
-    res.redirect('https://accounts.spotify.com/authorize?' +
-      querystring.stringify({
-        response_type: 'code',
-        client_id: client_id,
-        scope: scope,
-        redirect_uri: redirect_uri,
-        state: state
-      }));
+  const result = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params
   });
 
-  app.get('/callback', function(req, res) {
+  const { access_token } = await result.json();
+  return access_token;
+}
 
-    // your application requests refresh and access tokens
-    // after checking the state parameter
-  
-    var code = req.query.code || null;
-    var state = req.query.state || null;
-    var storedState = req.cookies ? req.cookies[stateKey] : null;
-  
-    if (state === null || state !== storedState) {
-      res.redirect('/#' + querystring.stringify({ error: 'state_mismatch' }));
-    } else {
-      res.clearCookie(stateKey);
-
-      const authOptions = {
-        method: 'post',
-        url: 'https://accounts.spotify.com/api/token',
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${client_id}:${client_secret}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded' // Set the correct Content-Type
-        },
-        data: querystring.stringify({
-          code: code,
-          redirect_uri: redirect_uri,
-          grant_type: 'authorization_code'
-        }),
-      };
-      console.log('Get to this stage');
-      let access_token;
-      axios(authOptions)
-        .then((response) => {
-          if (response.status === 200) {
-            var access_token = response.data.access_token;//remember the comma here
-                //refresh_token = body.refresh_token;
-            console.log('Token:', access_token);
-
-            const options = {
-              method: 'get',
-              url:'https://api.spotify.com/v1/me',
-              headers:{
-                'Authorization': 'Bearer '+ access_token,
-              },
-            };
-            return axios(options);
-          } else {
-            throw new Error('Invalid token response');
-          }
-        })
-        .then((userResponse) => {
-          console.log('User Data:', userResponse.data);
-          res.redirect('/#' + querystring.stringify({ access_token: access_token }));
-        })
-        .catch((error) => {
-          console.error('Error:', error.message);
-          res.redirect('/#' + querystring.stringify({ error: 'invalid_token' }));
-        });
-    }
+async function fetchProfile(token) {
+  const result = await fetch("https://api.spotify.com/v1/me", {
+      method: "GET", headers: { Authorization: `Bearer ${token}` }
   });
 
-console.log('Listening on 8888');
-app.listen(8888);
+  return await result.json();
+}
+
+function populateUI(profile) {
+  document.getElementById("displayName").innerText = profile.display_name;
+  if (profile.images[0]) {
+      const profileImage = new Image(200, 200);
+      profileImage.src = profile.images[0].url;
+      document.getElementById("avatar").appendChild(profileImage);
+      document.getElementById("imgUrl").innerText = profile.images[0].url;
+  }
+  document.getElementById("id").innerText = profile.id;
+  document.getElementById("email").innerText = profile.email;
+  document.getElementById("uri").innerText = profile.uri;
+  document.getElementById("uri").setAttribute("href", profile.external_urls.spotify);
+  document.getElementById("url").innerText = profile.href;
+  document.getElementById("url").setAttribute("href", profile.href);
+}
