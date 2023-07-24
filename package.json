@@ -1,5 +1,11 @@
 {
+  "name": "myproject",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "node credentials.js"
+  },
   "dependencies": {
+    "inotify":{"optional": true},
     "await": "^0.2.6",
     "axios": "^1.4.0",
     "cookie-parser": "^1.4.6",

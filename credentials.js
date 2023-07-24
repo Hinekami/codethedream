@@ -1,19 +1,23 @@
+document.addEventListener('DOMContentLoaded', async () => {
 const client_id = '3ebe7b6c776142a2a957548260b4dedf';
 const redirect_uri = 'http://localhost:8888/callback';
 
-const params = new URLSearchParams(window.location.search);
-const code = params.get("code");
 
-if (!code) {
-    redirectToAuthCodeFlow(clientId);
-} else {
-  const profile = await fetchProfile(token);
-  console.log(profile); // Profile data logs to console
-  populateUI(profile);
-}
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+
+  if (!code) {
+    await redirectToAuthCodeFlow(client_id);
+  } else {
+    const token = await getAccessToken(client_id, code);
+    const profile = await fetchProfile(token);
+    console.log(profile); // Profile data logs to console
+    populateUI(profile);
+  }
+});
 
 
-export async function redirectToAuthCodeFlow(clientId) {
+async function redirectToAuthCodeFlow(clientId) {
   const verifier = generateCodeVerifier(128);
   const challenge = await generateCodeChallenge(verifier);
 
@@ -22,7 +26,7 @@ export async function redirectToAuthCodeFlow(clientId) {
   const params = new URLSearchParams();
   params.append("client_id", clientId);
   params.append("response_type", "code");
-  params.append("redirect_uri", "http://localhost:5173/callback");
+  params.append("redirect_uri", "http://localhost:8888/callback");
   params.append("scope", "user-read-private user-read-email");
   params.append("code_challenge_method", "S256");
   params.append("code_challenge", challenge);
@@ -49,7 +53,7 @@ async function generateCodeChallenge(codeVerifier) {
       .replace(/=+$/, '');
 }
 
-export async function getAccessToken(clientId, code) {
+async function getAccessToken(clientId, code) {
   const verifier = localStorage.getItem("verifier");
 
   const params = new URLSearchParams();
