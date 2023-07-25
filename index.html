@@ -5,7 +5,8 @@
         <title>My Spotify Profile</title>
     </head>
     <body>
-      <h1>Display your Spotify profile data</h1>
+      <h1>Authentication</h1>
+      <button id="authorizeBtn">Authorize with Spotify</button>
       <section id="profile">
       <h2>Logged in as <span id="displayName"></span></h2>
       <span id="avatar"></span>
@@ -18,5 +19,29 @@
       </ul>
       </section>
       <script src="credentials.js"></script>
+      <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+          const client_id = '3ebe7b6c776142a2a957548260b4dedf';
+          const redirect_uri = 'http://localhost:8888/callback';
+
+            // Function to trigger the authorization flow
+            // Some refresh is necessary to display the info since this will save
+            // the token  but it won't get displayed until the token is used. 
+            const authorizeWithSpotify = async () => {
+                await redirectToAuthCodeFlow(client_id);
+            };
+            const authorizeBtn = document.getElementById('authorizeBtn');
+            authorizeBtn.addEventListener('click', authorizeWithSpotify);
+          
+          const url_use = 'http://localhost:8888/useToken';
+            try {
+                const response = await fetch(url_use);
+                const profile = await response.json();
+                populateUI(profile);
+            } catch (error) {
+                console.error('Error:', error.message);
+            }
+        });
+      </script>
     </body>
 </html>
